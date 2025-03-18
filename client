@@ -1,0 +1,90 @@
+import sys
+import socket
+import threading
+from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QTextEdit, QLineEdit, QPushButton
+from PyQt5.QtCore import Qt, QMetaObject
+
+class ChatClient(QWidget):
+    def __init__(self, host='127.0.0.1', port=65432):
+        super().__init__()
+        self.host = host
+        self.port = port
+        self.client_socket = None
+        self.username = None
+        self.initUI()
+        self.connect_to_server()
+
+    def initUI(self):
+        self.setWindowTitle("Chat Client")
+        self.setGeometry(100, 100, 400, 500)
+
+        # Layout
+        layout = QVBoxLayout()
+
+        # Chat display
+        self.chat_display = QTextEdit(self)
+        self.chat_display.setReadOnly(True)
+        layout.addWidget(self.chat_display)
+
+        # Message input
+        self.message_input = QLineEdit(self)
+        self.message_input.setPlaceholderText("Type your message...")
+        layout.addWidget(self.message_input)
+
+        # Send button
+        self.send_button = QPushButton("Send", self)
+        self.send_button.clicked.connect(self.send_message)
+        layout.addWidget(self.send_button)
+
+        self.setLayout(layout)
+
+    def connect_to_server(self):
+        """Connect to the server and start receiving messages."""
+        self.client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        try:
+            self.client_socket.connect((self.host, self.port))
+            self.username = self.get_username()
+            self.client_socket.sendall(self.username.encode())
+
+            # Start receiving messages in a separate thread
+            threading.Thread(target=self.receive_messages, daemon=True).start()
+        except Exception as e:
+            self.chat_display.append(f"Error: {e}")
+
+    def get_username(self):
+        """Prompt the user for a username."""
+        return input("Enter your username: ")
+
+    def receive_messages(self):
+        """Continuously listen for messages from the server and update the chat display."""
+        while True:
+            try:
+                data = self.client_socket.recv(1024)
+                if not data:
+                    break
+                message = data.decode()
+
+                # Ensure UI updates happen in the main thread
+                QMetaObject.invokeMethod(self.chat_display, "append", Qt.QueuedConnection, message)
+            except:
+                break
+
+    def send_message(self):
+        """Send the user's message to the server."""
+        message = self.message_input.text()
+        if message:
+            self.client_socket.sendall(message.encode())
+            self.message_input.clear()
+
+    def closeEvent(self, event):
+        """Handle window close event by disconnecting from the server."""
+        if self.client_socket:
+            self.client_socket.sendall("exit".encode())
+            self.client_socket.close()
+        event.accept()
+
+if __name__ == "__main__":
+    app = QApplication(sys.argv)
+    chat_client = ChatClient()
+    chat_client.show()
+    sys.exit(app.exec_())
