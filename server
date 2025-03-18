@@ -1,0 +1,52 @@
+import socket
+import threading
+
+clients = {}  # Dictionary to store {conn: username} pairs
+
+def handle_client(conn, addr):
+    try:
+        # Receive username from the client
+        username = conn.recv(1024).decode()
+        clients[conn] = username
+        print(f"{username} joined the chat from {addr}")
+
+        # Notify all users that a new user joined
+        broadcast(f"{username} has joined the chat!", conn)
+
+        while True:
+            data = conn.recv(1024)
+            if not data:
+                break
+            message = f"{username}: {data.decode()}"
+            print(message)
+            broadcast(message, conn)
+
+    except:
+        pass
+    finally:
+        print(f"{username} disconnected.")
+        broadcast(f"{username} has left the chat.", conn)
+        del clients[conn]
+        conn.close()
+
+def broadcast(message, sender_conn):
+    for client in clients:
+        if client != sender_conn:
+            try:
+                client.sendall(message.encode())
+            except:
+                pass
+
+def start_server(host='127.0.0.1', port=65432):
+    server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server_socket.bind((host, port))
+    server_socket.listen(5)  # Allow multiple users
+
+    print(f"Server listening on {host}:{port}...")
+
+    while True:
+        conn, addr = server_socket.accept()
+        threading.Thread(target=handle_client, args=(conn, addr)).start()
+
+if __name__ == "__main__":
+    start_server()
